@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# A crippled REPL for C, i.e. CREPL.
+# (c) BenjiWiebe 2018
+tmpfile=$(mktemp)
+out=$(mktemp)
+HISTFILE=$(mktemp)
+history -c
+cleanup () {
+	rm -f $tmpfile $out $HISTFILE
+	echo
+	echo Bye
+}
+std_entry () {
+	echo '#include <stdio.h>'
+	echo '#include <stdint.h>'
+	echo '#include <stdbool.h>'
+	echo '#include <stdlib.h>'
+	echo 'int main(int argc, char *argv[]) {';
+}
+std_exit () {
+	echo '}'
+}
+handle_code () {
+	echo "$1" >>$tmpfile
+	$do_run && run_code
+}
+
+run_code () {
+	if (cat $tmpfile; std_exit) | gcc -std=c99 -O0 -Wall -Wno-unused-variable -x c - -o $out; then
+		test -r $out && $out
+	fi
+}
+
+get_input () {
+	history -r
+	read -r -e -p 'crepl> ' R || exit
+	readret=$?
+	history -s "$R"
+	history -w
+}
+
+trap cleanup EXIT
+do_run=true
+std_entry >$tmpfile
+
+
+while get_input; do
+	case "$R" in
+		.reset|.re)
+			std_entry >$tmpfile
+			;;
+		.blank|.b)
+			echo -n >$tmpfile
+			;;
+		.view|.v)
+			cat $tmpfile
+			std_exit
+			;;
+		.run|.ru)
+			run_code
+			;;
+		.autorun|.a)
+			$do_run && do_run=false
+			echo "autorun = $do_run"
+			;;
+		.del|.d)
+			sed -i '$d' $tmpfile
+			;;
+		.help|.h)
+			echo "  .reset    Start over"
+			echo "  .blank    Start over, don't declare main() and #include's"
+			echo "  .view     View the current code"
+			echo "  .run      Run the code"
+			echo "  .autorun  Toggle automatic running of the code"
+			echo "  .del      Delete last line of code"
+			echo "  .exit     Exit"
+			echo "  .help     Show this message"
+			echo "    You can also use the shortest unambiguous abbreviation of each command as well,"
+			echo "    such as .h for .help, and .re for .reset."
+			;;
+		.exit|.e)
+			exit
+			;;
+		*)
+			handle_code "$R"
+			;;
+	esac
+done
