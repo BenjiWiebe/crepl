@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # A crippled REPL for C, i.e. CREPL.
 # (c) BenjiWiebe 2018
+red='tput setaf 2'
+green='tput setaf 1'
+reset='tput sgr0'
 tmpfile=$(mktemp)
 out=$(mktemp)
 HISTFILE=$(mktemp)
@@ -25,36 +28,44 @@ handle_code () {
 	$do_run && run_code
 }
 
+VIEW=false
+get_code () {
+	$VIEW && $green
+	std_entry
+	echo -E "$headline"
+	$VIEW && $reset
+	cat $tmpfile
+	$VIEW && $red
+	echo -E "$tailline"
+	std_exit
+	$VIEW && $reset
+}
+
 run_code () {
-	if (cat $tmpfile; std_exit) | gcc -std=c99 -O0 -Wall -Wno-unused-variable -x c - -o $out; then
+	if get_code | gcc -std=c99 -O0 -Wall -Wno-unused-variable -x c - -o $out; then
 		test -r $out && $out
 	fi
 }
 
 get_input () {
-	history -r
-	read -r -e -p 'crepl> ' R || exit
+	read -r -e -p "crepl$1> " R || exit
 	readret=$?
 	history -s "$R"
-	history -w
 }
 
 trap cleanup EXIT
 do_run=true
-std_entry >$tmpfile
-
 
 while get_input; do
 	case "$R" in
 		.reset|.re)
-			std_entry >$tmpfile
+			echo -n >$tmpfile
 			;;
 		.blank|.b)
 			echo -n >$tmpfile
 			;;
 		.view|.v)
-			cat $tmpfile
-			std_exit
+			VIEW=true get_code
 			;;
 		.run|.ru)
 			run_code
@@ -66,17 +77,26 @@ while get_input; do
 		.del|.d)
 			sed -i '$d' $tmpfile
 			;;
-		.help|.h)
+		.tail|.t)
+			get_input '-tail'
+			tailline=$R
+			;;
+		.head|.hea)
+			get_input '-head'
+			headline=$R
+			;;
+		.help|.hel)
 			echo "  .reset    Start over"
 			echo "  .blank    Start over, don't declare main() and #include's"
 			echo "  .view     View the current code"
 			echo "  .run      Run the code"
 			echo "  .autorun  Toggle automatic running of the code"
 			echo "  .del      Delete last line of code"
+			echo "  .tail     Specify a single line of code to run at the end of the program"
 			echo "  .exit     Exit"
 			echo "  .help     Show this message"
 			echo "    You can also use the shortest unambiguous abbreviation of each command as well,"
-			echo "    such as .h for .help, and .re for .reset."
+			echo "    such as .b for .blank, and .re for .reset."
 			;;
 		.exit|.e)
 			exit
